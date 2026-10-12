@@ -221,7 +221,7 @@ def active_window():
 
 
 def paste(text, target, cfg):
-    subprocess.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode(), check=True, timeout=3)
+    subprocess.run(['wl-copy', '--sensitive', '--type', 'text/plain;charset=utf-8'], input=text.encode(), check=True, timeout=3)
     current = active_window()
     if not target.get('address') or current.get('address') != target.get('address'):
         notify('Text is on the clipboard. Focus changed; paste it when ready.')
@@ -295,7 +295,7 @@ def worker(session):
             deadline = time.monotonic() + 15
             while not (RUNTIME / ('released-' + session)).exists():
                 if time.monotonic() > deadline:
-                    subprocess.run(['wl-copy'], input=result.encode(), check=True)
+                    subprocess.run(['wl-copy', '--sensitive'], input=result.encode(), check=True)
                     notify('Modifiers are still held. Text copied; paste when ready.')
                     update('Clipboard', error='', counters={'words': len(result.split()), 'dictations': 1},
                            latency=time.monotonic() - released)
