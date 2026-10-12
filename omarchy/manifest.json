@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "rohan.speechy1-indicator",
+  "name": "speechy1 Recording Bubble",
+  "version": "1.0.0",
+  "author": "Rohan Patnaik",
+  "license": "MIT",
+  "description": "Wispr-style speechy1 pill with live microphone bars and processing animation.",
+  "kinds": ["panel"],
+  "keepLoaded": true,
+  "entryPoints": {"panel": "Indicator.qml"}
+}

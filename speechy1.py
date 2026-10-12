@@ -25,6 +25,7 @@ HOME = Path.home()
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', HOME / '.config')) / 'speechy1'
 STATE = Path(os.environ.get('XDG_STATE_HOME', HOME / '.local/state')) / 'speechy1'
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid()))) / 'speechy1'
+VISUAL = {'phase': 'Idle', 'level': 0.0, 'screen': ''}
 DEFAULTS = {'asr_model': 'whisper-large-v3', 'cleanup_model': 'qwen/qwen3.8-27b',
             'max_seconds': 180, 'aliases': {}, 'preferred_words': [], 'snippets': {},
             'paste_command': None, 'daily_audio_seconds': 28800, 'daily_tokens': 200000,
@@ -64,6 +65,33 @@ def config():
     return DEFAULTS | read(CONFIG / 'config.json', {})
 
 
+def visual(phase=None, level=None, screen=None):
+    """Disposable, numeric-only UI IPC in the user's runtime (RAM) directory."""
+    if phase is not None:
+        VISUAL['phase'] = phase
+        if phase != 'Recording':
+            VISUAL['level'] = 0.0
+    if level is not None:
+        VISUAL['level'] = max(0.0, min(1.0, level))
+    if screen is not None:
+        VISUAL['screen'] = screen
+    atomic(RUNTIME / 'visual.json', VISUAL | {'updated_ms': round(time.time() * 1000)})
+
+
+def microphone_level(pcm):
+    """Same perceptual dBFS scale as the existing Wispr-style microphone pill."""
+    samples = array.array('h', pcm[:len(pcm) // 2 * 2])
+    if sys.byteorder != 'little':
+        samples.byteswap()
+    if not samples:
+        return 0.0
+    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples)) / 32768.0
+    if rms < 0.0025:
+        return 0.0
+    linear = max(0.0, min(1.0, (20 * math.log10(rms) + 46) / 34))
+    return linear ** 0.82
+
+
 def notify(message):
     if shutil.which('notify-send'):
         subprocess.run(['notify-send', '-a', 'speechy1', '-t', '3500', 'speechy1', message],
@@ -92,6 +120,8 @@ def publish(data):
 
 
 def update(phase=None, error=None, counters=None, latency=None, headers=None):
+    if phase is not None:
+        visual(phase)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (STATE / 'state.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -259,12 +289,16 @@ def worker(session):
     recorder = None
     try:
         cfg = config()
+        visual(screen=meta.get('screen', ''))
         update('Recording', error='')
         recorder = subprocess.Popen(['pw-record', '--rate=16000', '--channels=1', '--format=s16', '--raw', '-'],
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         os.set_blocking(recorder.stdout.fileno(), False)
         pcm = bytearray()
         started = time.monotonic()
+        last_meter = started
+        meter_pcm = bytearray()
+        level = 0.0
         stop_path = RUNTIME / ('stop-' + session)
         cancel_path = RUNTIME / ('cancel-' + session)
         while time.monotonic() - started < cfg['max_seconds']:
@@ -273,7 +307,16 @@ def worker(session):
             if recorder.poll() is not None:
                 raise RuntimeError('Microphone capture failed')
             if select.select([recorder.stdout], [], [], 0.04)[0]:
-                pcm.extend(os.read(recorder.stdout.fileno(), 64000))
+                chunk = os.read(recorder.stdout.fileno(), 64000)
+                pcm.extend(chunk)
+                meter_pcm.extend(chunk)
+                if time.monotonic() - last_meter >= 0.08:
+                    target_level = microphone_level(meter_pcm)
+                    weight = 0.68 if target_level > level else 0.24
+                    level += (target_level - level) * weight
+                    visual(level=round(level, 3))
+                    meter_pcm.clear()
+                    last_meter = time.monotonic()
         released = time.monotonic()
         recorder.send_signal(signal.SIGINT)
         tail, _ = recorder.communicate(timeout=3)
@@ -312,6 +355,7 @@ def worker(session):
         update('Error', error=message)
         notify(message)
     finally:
+        visual('Idle')
         if recorder and recorder.poll() is None:
             recorder.terminate()
             recorder.wait(timeout=3)
@@ -333,11 +377,18 @@ def control(action, keyboard=False):
                 notify('Add a Groq Free API key with speechy1 setup.')
                 return
             session = uuid.uuid4().hex
+            target = active_window()
+            screen = ''
+            if target and shutil.which('hyprctl'):
+                result = subprocess.run(['hyprctl', '-j', 'monitors'], capture_output=True, text=True, timeout=3)
+                if result.returncode == 0:
+                    screen = next((m['name'] for m in json.loads(result.stdout)
+                                   if m['id'] == target.get('monitor')), '')
             child = subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), '_worker', session],
                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      start_new_session=True)
             atomic(RUNTIME / 'worker.json', {'pid': child.pid, 'session': session,
-                                            'target': active_window(), 'keyboard': keyboard})
+                                            'target': target, 'keyboard': keyboard, 'screen': screen})
         elif live(meta):
             prefix = {'stop': 'stop-', 'cancel': 'cancel-', 'release': 'released-'}[action]
             (RUNTIME / (prefix + meta['session'])).touch(mode=0o600)

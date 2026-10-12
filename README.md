@@ -25,6 +25,8 @@ dofile(os.getenv("HOME") .. "/.config/hypr/speechy1.lua")
 
 Stop/disable another app using the same chord first. No app autostart is needed: the compositor shortcut launches a worker for each take. Hold Ctrl and either Super key in either order. Release either to stop capture; insertion waits until both modifiers are released. Maximum take length is three minutes.
 
+The installer also copies the Omarchy recording bubble plugin. Enable it with `omarchy plugin enable rohan.speechy1-indicator`. It uses the existing Wispr-style rise/fade/scale animation, eleven live microphone bars, and a purple processing wave. It appears on the dictation target's display and closes on completion, cancellation or failure. It accepts no keyboard/pointer focus. Levels come from the same PipeWire capture used for STT, via numeric-only runtime IPC; no extra microphone process or Python daemon is needed, and animation timers stop while hidden.
+
 ```sh
 speechy1 doctor        # local prerequisite/configuration check
 speechy1 start         # manual capture; speechy1 stop ends it
@@ -95,4 +97,4 @@ This project is inspired by the dictation workflows of [Handy](https://github.co
 python3 -B -m unittest discover -s tests -v
 ```
 
-Tests cover alias canonicalization and protected snippet failure behavior. Initial machine checks also exercised both Ctrl/Super orders, real PipeWire capture/cancel, authenticated ASR+cleanup on a public speech fixture, and insertion into a disposable Chrome field. One 11-second sample completed the two cloud calls in 0.55 seconds; this is a smoke measurement, not a general latency benchmark.
+Tests cover alias canonicalization, protected snippet failure behavior, microphone level response and numeric-only meter reset. Machine checks also exercised both Ctrl/Super orders, real PipeWire capture/cancel, authenticated ASR+cleanup on a public speech fixture, and insertion into a disposable Chrome field. The bubble's live render was checked for loud/soft level changes, processing, cancellation, idle hiding and preserved focus. One 11-second sample completed the two cloud calls in 0.55 seconds; this is a smoke measurement, not a general latency benchmark.
