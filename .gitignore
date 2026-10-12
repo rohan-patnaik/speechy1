@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+api-key
+config.json
+*.wav
+*.mp3
+*.log
