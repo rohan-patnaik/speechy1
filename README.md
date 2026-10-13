@@ -1,3 +1,7 @@
+# Retired on this machine
+
+Speechy1 was removed after the user rejected its accuracy. The active replacement is [fully local Inlay for Omarchy Linux](https://github.com/rohan-patnaik/inlay/tree/linux-headless), using upstream Parakeet and Qwen. This repository is preserved as historical source and is not the current project.
+
 # speechy1
 
 Headless English dictation for Linux: hold **Ctrl+Super**, speak, release, and insert cleaned text into the focused field.
